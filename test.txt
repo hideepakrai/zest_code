@@ -1,0 +1,2 @@
+home image path - C:\inetpub\wwwroot\zest_code\demo_assets\input_imgs
+pallete path - C:\inetpub\wwwroot\zest_code\demo_assets\material_exemplars

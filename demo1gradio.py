@@ -32,7 +32,6 @@ from DPT.dpt.transforms import Resize, NormalizeImage, PrepareForNet
 """
 Get ZeST Ready
 """
-# stabilityai/stable-diffusion-xl-base-1.0
 base_model_path = "stabilityai/stable-diffusion-xl-base-1.0"
 image_encoder_path = "models/image_encoder"
 ip_ckpt = "sdxl_models/ip-adapter_sdxl_vit-h.bin"
@@ -91,12 +90,12 @@ vae_fix_path = "madebyollin/sdxl-vae-fp16-fix"
 
 # Load ControlNet with the faster DTYPE and keep it on the GPU
 controlnet = ControlNetModel.from_pretrained(
-    controlnet_path, variant="fp16", use_safetensors=True, torch_dtype=DTYPE
+    controlnet_path, variant="fp16", use_safetensors=True, dtype=DTYPE
 ).to(device)
 
 # Load the fixed VAE model in half-precision (DTYPE)
 vae = AutoencoderKL.from_pretrained(
-    vae_fix_path, torch_dtype=DTYPE, use_safetensors=True
+    vae_fix_path, dtype=DTYPE, use_safetensors=True
 )
 
 # Load the main pipeline, injecting the fixed VAE, and remove manual .to(device)
@@ -105,7 +104,7 @@ pipe = StableDiffusionXLControlNetInpaintPipeline.from_pretrained(
     controlnet=controlnet,
     vae=vae, # <--- 1. INJECT THE FIXED VAE HERE
     use_safetensors=True,
-    torch_dtype=DTYPE,
+    dtype=DTYPE,
     add_watermarker=False,
 ) # REMOVED the .to(device) call to enable proper offloading
 
