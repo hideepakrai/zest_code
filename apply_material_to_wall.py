@@ -344,6 +344,128 @@ def main():
     final.save(OUT_IMG)
     print(f"✅ saved: {OUT_IMG.resolve()}")
 
+# def run_apply_material_with_inputs(
+#     house_img_pil: Image.Image,
+#     material_img_pil: Image.Image,
+#     detections_dict: dict,
+#     depth_img_pil: Image.Image | None = None,
+#     out_size: tuple[int, int] = (ANN_W, ANN_H),
+#     work_size: int = WORK_SIZE,
+# ) -> Image.Image:
+#     """Programmatic entrypoint used by the UI. Returns final composited image (PIL)."""
+
+#     device = "cuda" if torch.cuda.is_available() else "cpu"
+#     steps  = STEPS_GPU if device == "cuda" else STEPS_CPU
+
+#     # 1) Resize to annotation canvas
+#     house = house_img_pil.convert("RGB").resize((ANN_W, ANN_H), Image.BICUBIC)
+#     ip_image = material_img_pil.convert("RGB")
+
+#     # 2) Build mask from detections dict directly (no file IO)
+#     def build_wall_mask_from_dict(size: Tuple[int,int], data: dict) -> Image.Image:
+#         W, H = size
+#         wall_mask = Image.new("L", (W, H), 0)
+#         door_mask = Image.new("L", (W, H), 0)
+
+#         for r in data.get("results", []):
+#             label = (r.get("label") or "").lower().strip().rstrip(".")
+#             poly  = r.get("polygon") or []
+#             # robust to strings or floats
+#             poly  = [(int(float(x)), int(float(y))) for x, y in poly]
+#             if not poly:
+#                 continue
+#             if label == "wall":
+#                 wall_mask = ImageChops.lighter(wall_mask, polygon_to_mask((W,H), poly))
+#             elif label == "door":
+#                 door_mask = ImageChops.lighter(door_mask, polygon_to_mask((W,H), poly))
+
+#         return ImageChops.subtract(wall_mask, door_mask)
+
+#     wall_mask = build_wall_mask_from_dict((ANN_W, ANN_H), detections_dict)
+
+#     # 3) Depth
+#     if depth_img_pil is not None:
+#         depth_800x600 = depth_img_pil.convert("L").resize((ANN_W, ANN_H), Image.BICUBIC)
+#     else:
+#         depth_800x600 = compute_depth_dpt_800x600(house)
+
+#     # Letterbox for 1024 work canvas
+#     house_1024, roi = letterbox_to_square(house, work_size)
+#     mask_1024, _    = letterbox_to_square(wall_mask, work_size)
+#     depth_1024, _   = letterbox_to_square(depth_800x600, work_size)
+
+#     # Strict binary mask
+#     mask_1024 = mask_1024.convert("L").point(lambda p: 255 if p >= 128 else 0)
+
+#     # Depth 3-ch
+#     depth_1024 = depth_1024.convert("RGB")
+
+#     # Build pipeline + IP-Adapter
+#     pipe = build_pipe(device)
+#     orig_unet = pipe.unet
+#     ip_model = IPAdapterXL(pipe, IMAGE_ENCODER, str(IP_ADAPTER_WEIGHTS), device)
+
+#     autocast_ctx = torch.autocast("cuda", dtype=torch.float16) if device == "cuda" else contextlib.nullcontext()
+
+#     def run_once(mask_img):
+#         with autocast_ctx:
+#             return ip_model.generate(
+#                 pil_image=ip_image,
+#                 image=house_1024,
+#                 control_image=depth_1024,
+#                 mask_image=mask_img,
+#                 controlnet_conditioning_scale=0.7,
+#                 num_samples=1,
+#                 num_inference_steps=steps,
+#                 seed=SEED,
+#             )[0]
+
+#     def run_ip_adapter(mask_img):
+#         try:
+#             pipe.unet = register_cross_attention_hook(orig_unet)
+#             with autocast_ctx:
+#                 return ip_model.generate(
+#                     pil_image=ip_image,
+#                     image=house_1024,
+#                     control_image=depth_1024,
+#                     mask_image=mask_img,
+#                     controlnet_conditioning_scale=0.8,
+#                     num_samples=1,
+#                     num_inference_steps=steps,
+#                     seed=SEED,
+#                 )[0]
+#         finally:
+#             pipe.unet = orig_unet
+
+#     out_1024 = run_ip_adapter(mask_1024)
+
+#     # Fallbacks
+#     if looks_invalid(out_1024):
+#         inv_mask_1024 = ImageChops.invert(mask_1024)
+#         out_1024 = run_once(inv_mask_1024)
+
+#     if looks_invalid(out_1024):
+#         with autocast_ctx:
+#             out_1024 = pipe(
+#                 prompt=fallback_prompt,
+#                 negative_prompt=fallback_negative_prompt,
+#                 image=house_1024,
+#                 mask_image=mask_1024,
+#                 control_image=depth_1024,
+#                 controlnet_conditioning_scale=0.8,
+#                 strength=0.98,
+#                 generator=torch.Generator(device).manual_seed(SEED),
+#                 num_inference_steps=STEPS_GPU,
+#                 guidance_scale=7.5,
+#             ).images[0]
+
+#     # Unletterbox & composite
+#     out_wh = (ANN_W, ANN_H) if out_size is None else out_size
+#     out_800x600 = unletterbox_from_square(out_1024, roi, out_wh)
+#     final = Image.composite(out_800x600, house, wall_mask)
+#     return final
+
+
 if __name__ == "__main__":
     main()
 
